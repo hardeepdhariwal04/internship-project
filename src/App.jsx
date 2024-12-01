@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import { Configuration, OpenAIApi } from "openai";
@@ -214,13 +213,13 @@ const App = () => {
               {model}
             </button>
           ))}
-        </div>
+          </div>
         <Link to="/compare" className="compare-link">Compare Models</Link>
         <div>
           <Link to="/Q&A" className="compare-link">Response Answer</Link>
         </div>
-
       </div>
+      
 
       <div className="main">
         <h1>Translation App</h1>
