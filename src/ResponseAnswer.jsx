@@ -3,6 +3,7 @@ import "./App.css";
 import { Link } from "react-router-dom";
 import { Configuration, OpenAIApi } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from "@supabase/supabase-js";
 import { BeatLoader } from "react-spinners";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
