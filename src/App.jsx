@@ -100,7 +100,7 @@ const App = () => {
 
   const handleTranslationSave = async (original, translated, language, model) => {
     try {
-      const response = await axios.post('https://your-backend-url/api/translations', {
+      const response = await axios.post("https://internship-project-mauve-eta.vercel.app/api/translations", {
         original_message: original,
         translated_message: translated,
         language,
@@ -114,7 +114,7 @@ const App = () => {
 
   const fetchPreviousTranslations = async () => {
     try {
-      const response = await axios.get('https://your-backend-url/api/translations');
+      const response = await axios.get("http://localhost:5000/api/translations");
       setPreviousTranslations(response.data);
     } catch (error) {
       console.error("Error fetching translations:", error);
