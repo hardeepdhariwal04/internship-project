@@ -3,12 +3,7 @@ import "./App.css";
 import { Link } from "react-router-dom";
 import { Configuration, OpenAIApi } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@supabase/supabase-js";
 import { BeatLoader } from "react-spinners";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY; 
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const ResponseAnswer = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +14,6 @@ const ResponseAnswer = () => {
   const [responses, setResponses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [recognition, setRecognition] = useState(null);
 
   const googleGenAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
   const configuration = new Configuration({
@@ -36,7 +30,6 @@ const ResponseAnswer = () => {
     "gemini-1.5-flash-002",
     "gemini-1.5-pro-002",
     "deepl",
-    "assembly",
   ];
 
   const supportedLanguages = {
@@ -51,7 +44,7 @@ const ResponseAnswer = () => {
 
   const saveFeedback = async (model, type, response, rating) => {
     try {
-      const res = await fetch("/api/feedback", {
+      const res = await fetch("https://your-vercel-app-url/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model, type, response, rating }),
@@ -118,8 +111,8 @@ const ResponseAnswer = () => {
         model: m,
         type: results[i]?.type,
         response: results[i]?.response,
-        rating: null, // Initialize rating
-        rank: null, // Initialize rank
+        rating: null,
+        rank: null,
       }));
 
       setResponses(formattedResponses);
@@ -135,13 +128,11 @@ const ResponseAnswer = () => {
     const updatedResponses = [...responses];
     updatedResponses[index].rating = parseInt(value, 10) || null;
 
-    // Save feedback to database
     const { model, type, response } = updatedResponses[index];
     if (updatedResponses[index].rating) {
       saveFeedback(model, type, response, updatedResponses[index].rating);
     }
 
-    // Recalculate ranks based on ratings
     const rankedResponses = [...updatedResponses].sort((a, b) => (b.rating || 0) - (a.rating || 0));
     rankedResponses.forEach((res, idx) => (res.rank = idx + 1));
 

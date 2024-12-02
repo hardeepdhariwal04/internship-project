@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
+const { Pool } = require("pg");
 require("dotenv").config();
 
 const app = express();
@@ -10,16 +10,13 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Supabase client setup
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("Supabase environment variables are missing");
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+// PostgreSQL connection setup
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // Required for Vercel PostgreSQL SSL
+  },
+});
 
 // Endpoint to save feedback
 app.post("/api/feedback", async (req, res) => {
@@ -30,14 +27,15 @@ app.post("/api/feedback", async (req, res) => {
   }
 
   try {
-    const { data, error } = await supabase
-      .from("feedback")
-      .insert([{ model, type, response, rating }]);
+    const query = `
+      INSERT INTO feedback (model, type, response, rating)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *;
+    `;
+    const values = [model, type, response, rating];
 
-    if (error) {
-      throw error;
-    }
-    res.status(201).json(data);
+    const { rows } = await pool.query(query, values);
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error("Error saving feedback:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -47,15 +45,12 @@ app.post("/api/feedback", async (req, res) => {
 // Endpoint to fetch all feedback
 app.get("/api/feedback", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("feedback")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw error;
-    }
-    res.status(200).json(data);
+    const query = `
+      SELECT * FROM feedback
+      ORDER BY created_at DESC;
+    `;
+    const { rows } = await pool.query(query);
+    res.status(200).json(rows);
   } catch (err) {
     console.error("Error fetching feedback:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -66,3 +61,4 @@ app.get("/api/feedback", async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
+
