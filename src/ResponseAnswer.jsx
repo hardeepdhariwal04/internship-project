@@ -5,6 +5,10 @@ import { Configuration, OpenAIApi } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { BeatLoader } from "react-spinners";
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY; 
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const ResponseAnswer = () => {
   const [formData, setFormData] = useState({
     inputType: "translation", // Default input type
@@ -34,108 +38,54 @@ const ResponseAnswer = () => {
     "assembly",
   ];
 
-  // Expanded list of supported languages
   const supportedLanguages = {
-    "deepl": [
-      "Arabic", "Bulgarian", "Chinese (Simplified)", "Chinese (Traditional)", "Czech", "Danish", 
-      "Dutch", "English", "Estonian", "Finnish", "French", "German", "Greek", "Hungarian", 
-      "Indonesian", "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Norwegian", 
-      "Polish", "Portuguese", "Romanian", "Russian", "Slovak", "Slovenian", "Spanish", 
-      "Swedish", "Thai", "Turkish", "Ukrainian", "Vietnamese"
+    deepl: [
+      "Arabic", "Bulgarian", "Chinese (Simplified)", "Chinese (Traditional)", "Czech", "Danish",
+      "Dutch", "English", "Estonian", "Finnish", "French", "German", "Greek", "Hungarian",
+      "Indonesian", "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Norwegian",
+      "Polish", "Portuguese", "Romanian", "Russian", "Slovak", "Slovenian", "Spanish",
+      "Swedish", "Thai", "Turkish", "Ukrainian", "Vietnamese",
     ],
   };
 
-  const deepLLanguageCodes = {
-    "Arabic": "AR",
-    "Bulgarian": "BG",
-    "Chinese (Simplified)": "ZH",
-    "Chinese (Traditional)": "ZH-TW",
-    "Czech": "CS",
-    "Danish": "DA",
-    "Dutch": "NL",
-    "English": "EN",
-    "Estonian": "ET",
-    "Finnish": "FI",
-    "French": "FR",
-    "German": "DE",
-    "Greek": "EL",
-    "Hungarian": "HU",
-    "Indonesian": "ID",
-    "Italian": "IT",
-    "Japanese": "JA",
-    "Korean": "KO",
-    "Latvian": "LV",
-    "Lithuanian": "LT",
-    "Norwegian": "NO",
-    "Polish": "PL",
-    "Portuguese": "PT",
-    "Romanian": "RO",
-    "Russian": "RU",
-    "Slovak": "SK",
-    "Slovenian": "SL",
-    "Spanish": "ES",
-    "Swedish": "SV",
-    "Thai": "TH",
-    "Turkish": "TR",
-    "Ukrainian": "UK",
-    "Vietnamese": "VI",
-  };
+  const saveFeedback = async (model, type, response, rating) => {
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, type, response, rating }),
+      });
 
-  useEffect(() => {
-    // Set up speech recognition
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognitionInstance = new SpeechRecognition();
-      recognitionInstance.interimResults = false;
-      recognitionInstance.lang = 'en-US'; // Set the language as needed
+      if (!res.ok) {
+        throw new Error(`Failed to save feedback: ${res.statusText}`);
+      }
 
-      recognitionInstance.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setFormData({ ...formData, message: transcript });
-      };
-
-      recognitionInstance.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-        setError("Error recognizing speech. Please try again.");
-      };
-
-      setRecognition(recognitionInstance);
-    } else {
-      console.error("Speech recognition not supported in this browser.");
-      setError("Speech recognition is not supported in this browser.");
+      console.log("Feedback saved successfully.");
+    } catch (error) {
+      console.error("Error saving feedback:", error);
     }
-  }, []);
-
-  const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError("");
   };
+
   const translateOrAnswer = async (model, message, toLang) => {
     try {
-      if (model === "deepl") {
-        // DeepL does not support question answering
-        return { type: "translation", response: "DeepL does not support question answering." };
-      }
-  
       const prompt =
         formData.inputType === "translation"
           ? `Translate the text: "${message}" into ${toLang}`
           : `Answer the question: "${message}" in ${toLang}`;
-  
+
       const api = model.startsWith("gpt") ? openai : googleGenAI;
-  
-      // If the model is a Gemini model, adjust the prompt accordingly
+
       if (model.startsWith("gemini")) {
         const genAIModel = googleGenAI.getGenerativeModel({ model });
         const result = await genAIModel.generateContent(prompt);
         return { type: formData.inputType === "translation" ? "translation" : "answer", response: result.response.text() };
       }
-  
+
       const response = await api.createChatCompletion({
         model,
         messages: [{ role: "user", content: prompt }],
       });
-  
+
       return {
         type: formData.inputType === "translation" ? "translation" : "answer",
         response: response.data.choices[0].message.content.trim(),
@@ -145,7 +95,6 @@ const ResponseAnswer = () => {
       return { type: "error", response: `Error fetching response from ${model}` };
     }
   };
-
 
   const handleTranslateOrAnswer = async () => {
     const { inputType, toLanguage, message } = formData;
@@ -168,8 +117,8 @@ const ResponseAnswer = () => {
         model: m,
         type: results[i]?.type,
         response: results[i]?.response,
-        rating: null,
-        rank: null,
+        rating: null, // Initialize rating
+        rank: null, // Initialize rank
       }));
 
       setResponses(formattedResponses);
@@ -185,6 +134,12 @@ const ResponseAnswer = () => {
     const updatedResponses = [...responses];
     updatedResponses[index].rating = parseInt(value, 10) || null;
 
+    // Save feedback to database
+    const { model, type, response } = updatedResponses[index];
+    if (updatedResponses[index].rating) {
+      saveFeedback(model, type, response, updatedResponses[index].rating);
+    }
+
     // Recalculate ranks based on ratings
     const rankedResponses = [...updatedResponses].sort((a, b) => (b.rating || 0) - (a.rating || 0));
     rankedResponses.forEach((res, idx) => (res.rank = idx + 1));
@@ -192,21 +147,11 @@ const ResponseAnswer = () => {
     setResponses(rankedResponses);
   };
 
-  const startListening = () => {
-    if (recognition) {
-      recognition.start();
-    }
-  };
-
-  const stopListening = () => {
-    if (recognition) {
-      recognition.stop();
-    }
-  };
-
   return (
     <div className="container">
-      <Link to="/" className="back-link">Back to Translation</Link>
+      <Link to="/" className="back-link">
+        Back to Translation
+      </Link>
 
       <h1>AI Translation & QA App</h1>
 
@@ -218,7 +163,7 @@ const ResponseAnswer = () => {
               name="inputType"
               value="translation"
               checked={formData.inputType === "translation"}
-              onChange={handleInputChange}
+              onChange={(e) => setFormData({ ...formData, inputType: e.target.value })}
             />
             Translation
           </label>
@@ -228,7 +173,7 @@ const ResponseAnswer = () => {
               name="inputType"
               value="question"
               checked={formData.inputType === "question"}
-              onChange={handleInputChange}
+              onChange={(e) => setFormData({ ...formData, inputType: e.target.value })}
             />
             Question
           </label>
@@ -241,15 +186,15 @@ const ResponseAnswer = () => {
               ? "Enter text to translate..."
               : "Enter your question..."
           }
- value={formData.message}
-          onChange={handleInputChange}
+          value={formData.message}
+          onChange={(e) => setFormData({ ...formData, message: e.target.value })}
         ></textarea>
-        {/* {formData.inputType === "translation" && ( */}
-        { (
+
+        {formData.inputType === "translation" && (
           <select
             name="toLanguage"
             value={formData.toLanguage}
-            onChange={handleInputChange}
+            onChange={(e) => setFormData({ ...formData, toLanguage: e.target.value })}
           >
             {supportedLanguages.deepl.map((lang) => (
               <option key={lang} value={lang}>
@@ -262,12 +207,6 @@ const ResponseAnswer = () => {
         {error && <div className="error">{error}</div>}
         <button onClick={handleTranslateOrAnswer}>Submit</button>
       </form>
-
-      <div>
-        <h2>Speech Recognition</h2>
-        <button onClick={startListening}>Start Listening</button>
-        <button onClick={stopListening}>Stop Listening</button>
-      </div>
 
       {isLoading ? (
         <BeatLoader size={12} color={"red"} />
@@ -285,7 +224,7 @@ const ResponseAnswer = () => {
             </thead>
             <tbody>
               {responses.map((response, index) => (
-                <tr key={response.model}>
+                <tr key={index}>
                   <td>{response.model}</td>
                   <td>{response.type}</td>
                   <td>{response.response}</td>
