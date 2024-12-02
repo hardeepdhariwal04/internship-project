@@ -9,6 +9,11 @@ import { Link } from 'react-router-dom';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY; 
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Supabase URL or API key is missing!");
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const App = () => {
