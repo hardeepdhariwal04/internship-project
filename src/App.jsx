@@ -3,12 +3,12 @@ import "./App.css";
 import { Configuration, OpenAIApi } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { BeatLoader } from "react-spinners";
-// import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { Link } from 'react-router-dom';
 
-// const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
-// const supabaseKey = import.meta.env.VITE_SUPABASE_KEY; 
-// const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; 
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY; 
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const App = () => {
   const [formData, setFormData] = useState({
@@ -141,7 +141,7 @@ const App = () => {
         const response = await openai.createChatCompletion({
           model: model,
           messages: [
-            { role: "system", content: `Translate this sentence into ${toLanguage}.` },
+            { role: "system", content: `Translate this sentence into ${toLanguage}. `},
             { role: "user", content: message },
           ],
           temperature: formData.temperatureValue,
@@ -213,13 +213,12 @@ const App = () => {
               {model}
             </button>
           ))}
-          </div>
+        </div>
         <Link to="/compare" className="compare-link">Compare Models</Link>
         <div>
           <Link to="/Q&A" className="compare-link">Response Answer</Link>
         </div>
       </div>
-      
 
       <div className="main">
         <h1>Translation App</h1>
