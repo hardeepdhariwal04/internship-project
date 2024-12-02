@@ -13,15 +13,20 @@ app.use(express.json());
 // Supabase client setup
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Supabase environment variables are missing");
+  process.exit(1);
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Endpoint to save feedback
 app.post("/api/feedback", async (req, res) => {
   const { model, type, response, rating } = req.body;
 
-  // Validate the input
   if (!model || !type || !response || typeof rating !== "number" || rating < 1 || rating > 10) {
-    return res.status(400).json({ error: "Invalid input. Ensure all fields are provided and rating is between 1 and 10." });
+    return res.status(400).json({ error: "Invalid input. Rating must be between 1 and 10." });
   }
 
   try {
@@ -30,11 +35,11 @@ app.post("/api/feedback", async (req, res) => {
       .insert([{ model, type, response, rating }]);
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      throw error;
     }
     res.status(201).json(data);
-  } catch (error) {
-    console.error("Error saving feedback:", error);
+  } catch (err) {
+    console.error("Error saving feedback:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -48,11 +53,11 @@ app.get("/api/feedback", async (req, res) => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      throw error;
     }
     res.status(200).json(data);
-  } catch (error) {
-    console.error("Error fetching feedback:", error);
+  } catch (err) {
+    console.error("Error fetching feedback:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
