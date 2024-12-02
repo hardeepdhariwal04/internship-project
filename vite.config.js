@@ -15,10 +15,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/translate': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_BACKEND_URL || 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },
     },
   },
 });
+
