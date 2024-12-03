@@ -98,37 +98,31 @@ const ResponseAnswer = () => {
           model: response.model,
           type: response.type,
           response: response.response,
-          rating: response.rating || 0, // Default to 0 if not provided
-          rank: response.rank || 0,    // Default to 0 if not provided
+          rating: response.rating || 0,
+          rank: response.rank || 0,
           message: response.message,
-          to_language: response.to_language || null, // Handle optional to_language
-          created_at: new Date().toISOString(), // Add a timestamp if required
+          to_language: response.to_language || null,
+          created_at: new Date().toISOString(),
         }])
-        .select("id"); // Explicitly select the `id` after insertion
+        .select("id");
   
       if (error) {
         console.error("Error saving response to Supabase:", error.message);
+      } else if (data && data[0]?.id) {
+        console.log(`Saved response ID for model ${response.model}:`, data[0].id);
+        setResponses((prevResponses) => {
+          const updatedResponses = [...prevResponses];
+          updatedResponses[index].id = data[0].id; // Ensure every response gets its ID
+          return updatedResponses;
+        });
       } else {
-        console.log("Response saved to Supabase:", data);
-  
-        // Update the `id` in the state
-        if (data && data[0]?.id) {
-          setResponses((prevResponses) => {
-            const updatedResponses = [...prevResponses];
-            updatedResponses[index].id = data[0].id; // Assign the returned `id`
-            return updatedResponses;
-          });
-        }
+        console.error(`No ID returned for model ${response.model}`);
       }
     } catch (err) {
       console.error("Error interacting with Supabase:", err.message);
     }
   };
   
-  
-
-
-
   const translateOrAnswer = async (model, message, toLang) => {
     try {
       if (model === "deepl") {
@@ -213,45 +207,56 @@ const ResponseAnswer = () => {
     }
   };
   const handleRatingChange = async (index, value) => {
-    const updatedResponses = [...responses];
     const newRating = parseInt(value, 10);
   
-    // Validate the newRating
     if (isNaN(newRating)) {
       console.error("Invalid rating value provided.");
+      setError("Invalid rating value.");
       return;
     }
   
+    // Update the rating for the specific response
+    const updatedResponses = [...responses];
     updatedResponses[index].rating = newRating;
   
-    // Recalculate rank based on updated ratings
-    const rankedResponses = [...updatedResponses].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    rankedResponses.forEach((res, idx) => (res.rank = idx + 1)); // Assign rank based on sorted order
+    // Sort responses by rating in descending order and assign ranks
+    const rankedResponses = updatedResponses
+      .slice() // Create a shallow copy for sorting
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .map((res, idx) => ({
+        ...res,
+        rank: idx + 1, // Assign rank based on sorted position
+      }));
   
     setResponses(rankedResponses);
   
-    // Ensure the response has an `id` before updating
-    const updatedResponse = rankedResponses[index];
-    if (!updatedResponse.id) {
-      console.error("Cannot update rating: Missing response ID.");
+    // Update the rank and rating in the database
+    const updatedResponse = rankedResponses.find((res) => res.model === updatedResponses[index].model);
+    if (!updatedResponse || !updatedResponse.id) {
+      console.error("Missing response ID for update.");
       return;
     }
   
     try {
       const { data, error } = await supabase
         .from("responses")
-        .update({ rating: newRating }) // Update with the new rating value
-        .eq("id", updatedResponse.id); // Ensure you are updating the correct response by ID
+        .update({
+          rating: updatedResponse.rating,
+          rank: updatedResponse.rank,
+        })
+        .eq("id", updatedResponse.id);
   
       if (error) {
-        console.error("Error updating rating in Supabase:", error.message);
+        console.error(`Failed to update rating and rank for ${updatedResponse.model}:`, error.message);
       } else {
-        console.log("Rating updated in Supabase:", data);
+        console.log(`Successfully updated rating and rank for ${updatedResponse.model}:`, data);
       }
     } catch (err) {
-      console.error("Error interacting with Supabase:", err.message);
+      console.error("Error updating response in database:", err.message);
     }
   };
+  
+  
   
   const handleTranslateOrAnswer = async () => {
     const { inputType, toLanguage, message } = formData;
@@ -270,20 +275,23 @@ const ResponseAnswer = () => {
         models.map((m) => translateOrAnswer(m, message, toLanguage))
       );
   
+      // Calculate initial ranks
       const formattedResponses = models.map((m, i) => ({
         model: m,
         type: results[i]?.type,
         response: results[i]?.response,
-        rating: 0, // Default value
-        rank: i + 1, // Default rank based on order
+        rating: 0,
+        rank: i + 1, // Default rank based on initial order
         message,
         to_language: formData.inputType === "translation" ? toLanguage : null,
       }));
   
       setResponses(formattedResponses);
   
-      // Save all responses to Supabase with their index
-      formattedResponses.forEach((response, index) => saveToSupabase(response, index));
+      // Save all responses to Supabase
+      await Promise.all(
+        formattedResponses.map((response, index) => saveToSupabase(response, index))
+      );
     } catch (error) {
       console.error("Error processing request:", error.message);
       setError("An error occurred while processing your request.");
@@ -292,16 +300,6 @@ const ResponseAnswer = () => {
     }
   };
   
-  
-
-
-  
-  
-
-
-
-
-
   const startListening = () => {
     if (recognition) {
       recognition.start();
