@@ -4,6 +4,12 @@ import { Link } from "react-router-dom";
 import { Configuration, OpenAIApi } from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { BeatLoader } from "react-spinners";
+import { createClient } from "@supabase/supabase-js";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+
 
 const ResponseAnswer = () => {
   const [formData, setFormData] = useState({
@@ -84,6 +90,44 @@ const ResponseAnswer = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError("");
   };
+  const saveToSupabase = async (response, index) => {
+    try {
+      const { data, error } = await supabase
+        .from("responses")
+        .insert([{
+          model: response.model,
+          type: response.type,
+          response: response.response,
+          rating: response.rating || 0, // Default to 0 if not provided
+          rank: response.rank || 0,    // Default to 0 if not provided
+          message: response.message,
+          to_language: response.to_language || null, // Handle optional to_language
+          created_at: new Date().toISOString(), // Add a timestamp if required
+        }])
+        .select("id"); // Explicitly select the `id` after insertion
+  
+      if (error) {
+        console.error("Error saving response to Supabase:", error.message);
+      } else {
+        console.log("Response saved to Supabase:", data);
+  
+        // Update the `id` in the state
+        if (data && data[0]?.id) {
+          setResponses((prevResponses) => {
+            const updatedResponses = [...prevResponses];
+            updatedResponses[index].id = data[0].id; // Assign the returned `id`
+            return updatedResponses;
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error interacting with Supabase:", err.message);
+    }
+  };
+  
+  
+
+
 
   const translateOrAnswer = async (model, message, toLang) => {
     try {
@@ -168,43 +212,78 @@ const ResponseAnswer = () => {
       return { type: "error", response: `Error with ${model}: ${error.message}` };
     }
   };
-
-  const handleRatingChange = (index, value) => {
+  const handleRatingChange = async (index, value) => {
     const updatedResponses = [...responses];
-    updatedResponses[index].rating = parseInt(value, 10) || null;
-
+    const newRating = parseInt(value, 10);
+  
+    // Validate the newRating
+    if (isNaN(newRating)) {
+      console.error("Invalid rating value provided.");
+      return;
+    }
+  
+    updatedResponses[index].rating = newRating;
+  
+    // Recalculate rank based on updated ratings
     const rankedResponses = [...updatedResponses].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    rankedResponses.forEach((res, idx) => (res.rank = idx + 1));
-
+    rankedResponses.forEach((res, idx) => (res.rank = idx + 1)); // Assign rank based on sorted order
+  
     setResponses(rankedResponses);
+  
+    // Ensure the response has an `id` before updating
+    const updatedResponse = rankedResponses[index];
+    if (!updatedResponse.id) {
+      console.error("Cannot update rating: Missing response ID.");
+      return;
+    }
+  
+    try {
+      const { data, error } = await supabase
+        .from("responses")
+        .update({ rating: newRating }) // Update with the new rating value
+        .eq("id", updatedResponse.id); // Ensure you are updating the correct response by ID
+  
+      if (error) {
+        console.error("Error updating rating in Supabase:", error.message);
+      } else {
+        console.log("Rating updated in Supabase:", data);
+      }
+    } catch (err) {
+      console.error("Error interacting with Supabase:", err.message);
+    }
   };
-
+  
   const handleTranslateOrAnswer = async () => {
     const { inputType, toLanguage, message } = formData;
-
+  
     if (!message || (inputType === "translation" && !toLanguage)) {
       setError("Please fill in all fields.");
       return;
     }
-
+  
     setError("");
     setIsLoading(true);
     setResponses([]);
-
+  
     try {
       const results = await Promise.all(
         models.map((m) => translateOrAnswer(m, message, toLanguage))
       );
-
+  
       const formattedResponses = models.map((m, i) => ({
         model: m,
         type: results[i]?.type,
         response: results[i]?.response,
-        rating: null,
-        rank: null,
+        rating: 0, // Default value
+        rank: i + 1, // Default rank based on order
+        message,
+        to_language: formData.inputType === "translation" ? toLanguage : null,
       }));
-
+  
       setResponses(formattedResponses);
+  
+      // Save all responses to Supabase with their index
+      formattedResponses.forEach((response, index) => saveToSupabase(response, index));
     } catch (error) {
       console.error("Error processing request:", error.message);
       setError("An error occurred while processing your request.");
@@ -212,6 +291,16 @@ const ResponseAnswer = () => {
       setIsLoading(false);
     }
   };
+  
+  
+
+
+  
+  
+
+
+
+
 
   const startListening = () => {
     if (recognition) {
